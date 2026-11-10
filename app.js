@@ -1,7 +1,7 @@
 /* UTSL Forms — เว็บแอป (Microsoft login · เลือกเลขที่ใบสั่งงานจากทะเบียนงาน · 5 แบบฟอร์ม · PDF → SharePoint + อีเมล) */
 "use strict";
 var C = window.APP_CONFIG || {};
-var DEMO = !C.CLIENT_ID;
+var DEMO = !C.CLIENT_ID || /[?&]demo=1/.test(location.search);   // ?demo=1 = โหมดทดลอง
 var FORMS = [
   { id:"asset",   code:"FM-SV-06-04",   title:"ใบรายการทรัพย์สินลูกค้า",            en:"Customer Asset List" },
   { id:"service", code:"FM-SV-02-01",   title:"Service Report",                        en:"Service Report" },
