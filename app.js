@@ -36,7 +36,7 @@ async function authInit(){
   if(DEMO) return;
   if(typeof msal==="undefined") throw new Error("โหลดระบบเข้าสู่ระบบ Microsoft ไม่สำเร็จ — ตรวจสอบอินเทอร์เน็ต");
   MSAL=new msal.PublicClientApplication({
-    auth:{clientId:C.CLIENT_ID,authority:"https://login.microsoftonline.com/"+C.TENANT_ID,redirectUri:location.origin+location.pathname,navigateToLoginRequestUrl:true},
+    auth:{clientId:C.CLIENT_ID,authority:"https://login.microsoftonline.com/"+C.TENANT_ID,redirectUri:location.origin+location.pathname.replace(/index\.html$/,""),navigateToLoginRequestUrl:true},
     cache:{cacheLocation:"localStorage",storeAuthStateInCookie:true}
   });
   var r=await MSAL.handleRedirectPromise();
@@ -46,7 +46,7 @@ async function authInit(){
   }
 }
 function login(){ return MSAL.loginRedirect({scopes:SCOPES,prompt:"select_account",domainHint:C.DOMAIN}); }
-function logout(){ return MSAL.logoutRedirect({account:ACCOUNT,postLogoutRedirectUri:location.origin+location.pathname}); }
+function logout(){ return MSAL.logoutRedirect({account:ACCOUNT,postLogoutRedirectUri:location.origin+location.pathname.replace(/index\.html$/,"")}); }
 async function token(){
   try{ return (await MSAL.acquireTokenSilent({scopes:SCOPES,account:ACCOUNT})).accessToken; }
   catch(e){ await MSAL.acquireTokenRedirect({scopes:SCOPES,account:ACCOUNT}); throw new Error("กำลังเข้าสู่ระบบใหม่..."); }
