@@ -32,8 +32,13 @@ function go(h){ if(location.hash===h) route(); else location.hash=h; }
 
 /* ================= Microsoft login (MSAL) ================= */
 var MSAL=null, ACCOUNT=null;
+/* ฝังอยู่ในหน้า SharePoint (iframe) → เข้าสู่ระบบผ่านหน้าต่าง popup เพราะหน้า login ของ Microsoft เปิดใน iframe ไม่ได้ */
+var IN_FRAME=(function(){try{return window.self!==window.top}catch(e){return true}})();
+var IS_POPUP=!!(window.opener&&window.opener!==window&&/^msal\./.test(window.name||""));
+var APP_URL=location.origin+location.pathname.replace(/index\.html$/,"");
 async function authInit(){
   if(DEMO) return;
+  if(IS_POPUP){ document.body.innerHTML='<p style="font:16px sans-serif;text-align:center;margin-top:40px">กำลังเข้าสู่ระบบ...</p>'; throw "popup"; }
   if(typeof msal==="undefined") throw new Error("โหลดระบบเข้าสู่ระบบ Microsoft ไม่สำเร็จ — ตรวจสอบอินเทอร์เน็ต");
   MSAL=new msal.PublicClientApplication({
     auth:{clientId:C.CLIENT_ID,authority:"https://login.microsoftonline.com/"+C.TENANT_ID,redirectUri:location.origin+location.pathname.replace(/index\.html$/,""),navigateToLoginRequestUrl:true},
@@ -45,11 +50,25 @@ async function authInit(){
     var bad=ACCOUNT.username; ACCOUNT=null; sessionStorage.setItem("loginErr","บัญชี "+bad+" ไม่ใช่บัญชี @"+C.DOMAIN);
   }
 }
-function login(){ return MSAL.loginRedirect({scopes:SCOPES,prompt:"select_account",domainHint:C.DOMAIN}); }
-function logout(){ return MSAL.logoutRedirect({account:ACCOUNT,postLogoutRedirectUri:location.origin+location.pathname.replace(/index\.html$/,"")}); }
+function login(){
+  var req={scopes:SCOPES,prompt:"select_account",domainHint:C.DOMAIN};
+  if(!IN_FRAME) return MSAL.loginRedirect(req);
+  return MSAL.loginPopup(req).then(function(r){
+    ACCOUNT=r&&r.account;
+    if(ACCOUNT&&C.DOMAIN&&!String(ACCOUNT.username||"").toLowerCase().endsWith("@"+C.DOMAIN)){ACCOUNT=null;throw new Error("กรุณาใช้บัญชี @"+C.DOMAIN)}
+    busy(false); route();
+  });
+}
+function logout(){
+  if(IN_FRAME) return MSAL.logoutPopup({account:ACCOUNT}).finally(function(){ACCOUNT=null;route()});
+  return MSAL.logoutRedirect({account:ACCOUNT,postLogoutRedirectUri:APP_URL});
+}
 async function token(){
   try{ return (await MSAL.acquireTokenSilent({scopes:SCOPES,account:ACCOUNT})).accessToken; }
-  catch(e){ await MSAL.acquireTokenRedirect({scopes:SCOPES,account:ACCOUNT}); throw new Error("กำลังเข้าสู่ระบบใหม่..."); }
+  catch(e){
+    if(IN_FRAME) return (await MSAL.acquireTokenPopup({scopes:SCOPES,account:ACCOUNT})).accessToken;
+    await MSAL.acquireTokenRedirect({scopes:SCOPES,account:ACCOUNT}); throw new Error("กำลังเข้าสู่ระบบใหม่...");
+  }
 }
 
 /* ================= Microsoft Graph ================= */
@@ -506,8 +525,9 @@ function vLogin(){
   view.innerHTML='<div class="login"><div class="card"><div style="font-size:42px">📝</div><h1>UTSL Forms</h1>'+
     '<p class="sub">เข้าสู่ระบบด้วยบัญชี Microsoft ของบริษัท (<b>@'+esc(C.DOMAIN)+'</b>)</p>'+
     '<button id="lgo" style="width:100%">เข้าสู่ระบบด้วย Microsoft</button>'+
-    (err?'<p class="err" style="margin-top:10px">'+esc(err)+' — กรุณาเลือกบัญชีของบริษัท</p>':'')+'</div></div>';
-  $("#lgo").onclick=function(){ busy(true,"กำลังไปหน้าเข้าสู่ระบบ Microsoft..."); login().catch(function(e){busy(false);toast(e.message||String(e),6000)}); };
+    (err?'<p class="err" style="margin-top:10px">'+esc(err)+' — กรุณาเลือกบัญชีของบริษัท</p>':'')+
+    (IN_FRAME?'<p class="sub" style="margin:12px 0 0">ถ้าหน้าต่างเข้าสู่ระบบไม่ขึ้น (เบราว์เซอร์บล็อก popup) ให้ <a href="'+esc(APP_URL)+'" target="_blank" rel="noopener" style="color:var(--teal)">เปิดแอปในแท็บใหม่</a></p>':'')+'</div></div>';
+  $("#lgo").onclick=function(){ busy(true,IN_FRAME?"กำลังเปิดหน้าต่างเข้าสู่ระบบ Microsoft...":"กำลังไปหน้าเข้าสู่ระบบ Microsoft..."); login().catch(function(e){busy(false);toast(/popup_window_error|empty_window_error/.test(e&&e.errorCode||e&&e.message||"")?"เบราว์เซอร์บล็อกหน้าต่าง popup — กดลิงก์ 'เปิดแอปในแท็บใหม่' แทน":(e.message||String(e)),7000)}); };
 }
 
 /* ---------- ขั้นที่ 1: เลือกเลขที่ใบสั่งงาน ---------- */
@@ -797,7 +817,7 @@ function route(){
 addEventListener("hashchange",route);
 (async function(){
   try{ busy(true,"กำลังเริ่มระบบ..."); await authInit(); }
-  catch(e){ toast(e.message||String(e),8000); }
+  catch(e){ if(e==="popup") return; toast(e.message||String(e),8000); }
   finally{ busy(false); }
   route();
 })();
